@@ -16,6 +16,8 @@ from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit, 
 matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from inputs import get_gamepad
+import threading
 
 try:
     from MDT_COMMAND_LIB import *
@@ -45,6 +47,7 @@ class WidgetGallery(QDialog):
         self.padStep = 0
         self.pzhdl = {}
         self.padControlToggle = 0
+        self.stepArray = np.array([1, 5, 10, 25, 100, 250, 500, 1000])/65536
 
         super(WidgetGallery, self).__init__(parent)
 
@@ -60,22 +63,21 @@ class WidgetGallery(QDialog):
 
         self.changeStyle('windowsvista')
 
+        self.joy = XboxController(self.freeControlButton)
+
         self.padThread = QThread()
-        self.padTracker = padWorker(self.serialNumber, self.pzhdl, self.freeControlButton, self.xVoltage, self.yVoltage, self.zVoltage, self.padStep, self.limitVoltage)
+        self.padTracker = padWorker(self.serialNumber, self.pzhdl, self.freeControlButton, self.xVoltage, self.yVoltage, self.zVoltage, self.padStep, self.limitVoltage, self.joy, self.stepArray)
         self.padTracker.comms.connect(self.updateStatus.appendPlainText)
+        self.padTracker.xVSChange.connect(self.xVSlider.setValue)
+        self.padTracker.yVSChange.connect(self.yVSlider.setValue)
+        self.padTracker.zVSChange.connect(self.zVSlider.setValue)
+        self.padTracker.stepComms.connect(self.voltageStepValueText.setText)
         self.padTracker.moveToThread(self.padThread)
         self.padThread.started.connect(self.padTracker.run)
+        self.padTracker.disconnect.connect(self.padDisconnect)
         self.padTracker.disconnect.connect(self.padThread.quit)
         self.padTracker.disconnect.connect(self.padTracker.deleteLater)
         self.padThread.finished.connect(self.padThread.deleteLater)
-
-    def closeEvent(self, event):
-        if (self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
-            mdtClose(self.pzhdl)
-
-        # check gamepad reading
-        if (True):
-            return
 
     def overallWidget(self):
 
@@ -256,8 +258,8 @@ class WidgetGallery(QDialog):
         self.yVSlider.setValue(self.yValue)
         self.zVSlider.setValue(self.zValue)
 
-        mdtGetVoltageAdjustmentResolution(self.pzhdl,self.padStep)
-        self.voltageStepValueText.setText(self.padStep)
+        mdtGetVoltageAdjustmentResolution(self.pzhdl,self.stepArray[self.padStep])
+        self.voltageStepValueText.setText(self.stepArray[self.padStep])
 
         self.voltageTracker()
     
@@ -280,7 +282,7 @@ class WidgetGallery(QDialog):
 
     def voltageTracker(self):
         self.trackerThread = QThread()
-        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl)
+        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage)
         self.voltTracker.xVSVT.connect(self.xVSliderValueText.setText)
         self.voltTracker.yVSVT.connect(self.xVSliderValueText.setText)
         self.voltTracker.zVSVT.connect(self.xVSliderValueText.setText)
@@ -325,25 +327,53 @@ class WidgetGallery(QDialog):
             time.sleep(1)
 
     def togglePadControl(self):
-        if (self.freeControlButton.isChecked() and self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
-            self.freeControlButton.setStyleSheet("background-color : lightblue")
-            self.padControlToggle = 1
+        try:
+            get_gamepad()
+        except:
+            self.updateStatus.appendPlainText("No pad attached.")
+            self.freeControlButton.setChecked(False)
+            return -1
 
-            self.padThread.start()
+        if (self.freeControlButton.isChecked() and self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
+            try:
+                self.joy.startThread()
+                self.padThread.start()
+                # update sliders on voltage change as well
+                self.freeControlButton.setStyleSheet("background-color : lightblue")
+                self.padControlToggle = 1
+            except:
+                self.updateStatus.appendPlainText("No controller attached.")
+                self.freeControlButton.setStyleSheet("background-color : lightgrey")
+                self.padControlToggle = 0
+                self.freeControlButton.setChecked(False)
         else:
             self.freeControlButton.setStyleSheet("background-color : lightgrey")
             self.padControlToggle = 0
         
         return -1
+    
+    def padDisconnect(self):
+        self.freeControlButton.setStyleSheet("background-color : lightgrey")
+        self.padControlToggle = 0
+        self.padControlToggle = 0
+        self.freeControlButton.setChecked(False)
 
 class padWorker(QThread):
     comms = pyqtSignal(str)
+    stepComms = pyqtSignal(str)
     disconnect = pyqtSignal()
+    xVSChange = pyqtSignal(int)
+    yVSChange = pyqtSignal(int)
+    zVSChange = pyqtSignal(int)
     stepx = 0
     stepy = 0
     stepz = 0
+    sliderXVal = 0
+    sliderYVal = 0
+    sliderZVal = 0
+    gamepadCheck = 0
 
-    def __init__(self, serialNumber, pzhdl, toggleButton, xVoltage, yVoltage, zVoltage, padStep, limitVoltage):
+    def __init__(self, serialNumber, pzhdl, toggleButton, xVoltage, yVoltage, zVoltage, padStep, limitVoltage, joy, stepArray):
         super().__init__()
         self.toggleButton = toggleButton
         self.serialNumber = serialNumber
@@ -353,20 +383,65 @@ class padWorker(QThread):
         self.zVoltage = zVoltage
         self.padStep = padStep
         self.limitVoltage = limitVoltage
-
-    # establish connection to gamepad
+        self.joy = joy
+        self.stepArray = stepArray
+    
+    def convertVoltageToVal(curVoltage):
+        return (65536 * (curVoltage/self.limitVoltage))
+    
+    def convertValToVoltage(curVal):
+        return ((curVal/65536) * self.limitVoltage)
     
     def run(self):
-        while (self.toggleButton.isChecked()):
+        try:
+            get_gamepad()
+            self.gamepadCheck = 1
+        except:
+            self.gamepadCheck = 0
+
+        while (self.toggleButton.isChecked() and self.gamepadCheck == 1):
+
+            try:
+                get_gamepad()
+                self.gamepadCheck = 1
+            except:
+                self.gamepadCheck = 0
             
-            # get active pad events
+            joyInputs = self.joy.read()
+            self.comms.emit(str(joyInputs))
+
+            if (joyInputs[4] >= 0.25):
+                if (self.padStep < len(self.stepArray)-1):
+                    self.padStep = self.padStep + 1
+                    self.stepComms.emit(self.stepArray[self.padStep])
+            elif (joyInputs[5] >= 0.25):
+                if (self.padStep > 0):
+                    self.padStep = self.padStep - 1
+                    self.stepComms.emit(self.stepArray[self.padStep])
+
+            if (joyInputs[0] >= 0.25):
+                stepx = 1
+            elif (joyInputs[0] <= -0.25):
+                stepx = -1
+            else:
+                stepx = 0
             
-            # figure out how to increment voltage step with DPad
-            # establish incDir
-            # set steps to 1, -1, or 0
+            if (joyInputs[1] >= 0.25):
+                stepy = 1
+            elif (joyInputs[1] <= -0.25):
+                stepy = -1
+            else:
+                stepy = 0
+
+            if (joyInputs[3] >= 0.25 and joyInputs[2] < 0.25):
+                stepz = 1
+            elif (joyInputs[2] >= 0.25 and joyInputs[3] < 0.25):
+                stepz = -1
+            else:
+                stepz = 0
 
             if (stepx != 0):
-                candidateVoltage = xVoltage + stepx*self.padStep
+                candidateVoltage = xVoltage + stepx*self.stepArray(self.padStep)*self.limitVoltage
                 if (candidateVoltage > self.limitVoltage):
                     mdtSetXAxisVoltage(self.pzhdl,self.limitVoltage)
                 elif (candidateVoltage < 0):
@@ -375,7 +450,7 @@ class padWorker(QThread):
                     mdtSetXAxisVoltage(self.pzhdl,candidateVoltage)
             
             if (stepy != 0):
-                candidateVoltage = yVoltage + stepy*self.padStep
+                candidateVoltage = yVoltage + stepy*self.stepArray(self.padStep)*self.limitVoltage
                 if (candidateVoltage > self.limitVoltage):
                     mdtSetYAxisVoltage(self.pzhdl,self.limitVoltage)
                 elif (candidateVoltage < 0):
@@ -384,13 +459,25 @@ class padWorker(QThread):
                     mdtSetYAxisVoltage(self.pzhdl,candidateVoltage)
 
             if (stepz != 0):
-                candidateVoltage = zVoltage + stepz*self.padStep
+                candidateVoltage = zVoltage + stepz*self.stepArray(self.padStep)*self.limitVoltage
                 if (candidateVoltage > self.limitVoltage):
                     mdtSetZAxisVoltage(self.pzhdl,self.limitVoltage)
                 elif (candidateVoltage < 0):
                     mdtSetZAxisVoltage(self.pzhdl,0)
                 else:
                     mdtSetZAxisVoltage(self.pzhdl,candidateVoltage)
+
+            mdtGetXAxisVoltage(self.pzhdl, self.xVoltage)
+            mdtGetYAxisVoltage(self.pzhdl, self.yVoltage)
+            mdtGetZAxisVoltage(self.pzhdl, self.zVoltage)
+
+            sliderXVal = np.round(convertVoltageToVal(self.xVoltage))
+            sliderYVal = np.round(convertVoltageToVal(self.yVoltage))
+            sliderZVal = np.round(convertVoltageToVal(self.zVoltage))
+                
+            self.xVSChange.emit(sliderXVal)
+            self.yVSChange.emit(sliderYVal)
+            self.zVSChange.emit(sliderZVal)
 
             time.sleep(0.5)
 
@@ -406,21 +493,126 @@ class voltageWorker(QThread):
     yV = 0
     zV = 0
 
-    def __init__(self, serialNumber, pzhdl):
+    def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage):
         super().__init__()
         self.serialNumber = serialNumber
         self.pzhdl = pzhdl
+        self.xVoltage = xVoltage
+        self.yVoltage = yVoltage
+        self.zVoltage = zVoltage
 
     def run(self):
         while (mdtIsOpen(self.serialNumber) == 1):
             mdtGetXAxisVoltage(self.pzhdl, xV)
             mdtGetYAxisVoltage(self.pzhdl, yV)
             mdtGetZAxisVoltage(self.pzhdl, zV)
+            self.xVoltage = xV
+            self.yVoltage = yV
+            self.zVoltage = zV
             self.xVSVT.emit(str(xV))
             self.yVSVT.emit(str(yV))
             self.zVSVT.emit(str(zV))
             sleep(0.5)
         self.disconnect.emit()
+
+class XboxController(object):
+    MAX_TRIG_VAL = math.pow(2, 8)
+    MAX_JOY_VAL = math.pow(2, 15)
+    padConnected = 0
+
+    def __init__(self, padButton):
+
+        self.padButton = padButton
+        self.LeftJoystickY = 0
+        self.LeftJoystickX = 0
+        self.RightJoystickY = 0
+        self.RightJoystickX = 0
+        self.LeftTrigger = 0
+        self.RightTrigger = 0
+        self.LeftBumper = 0
+        self.RightBumper = 0
+        self.A = 0
+        self.X = 0
+        self.Y = 0
+        self.B = 0
+        self.LeftThumb = 0
+        self.RightThumb = 0
+        self.Back = 0
+        self.Start = 0
+        self.LeftDPad = 0
+        self.RightDPad = 0
+        self.UpDPad = 0
+        self.DownDPad = 0
+
+    def startThread(self):
+        self._monitor_thread = threading.Thread(target=self._monitor_controller, args=())
+        self._monitor_thread.daemon = True
+        self._monitor_thread.start()
+
+    def read(self): # return the buttons/triggers that you care about in this methode
+        x = self.LeftJoystickX
+        y = self.LeftJoystickY
+        l = self.LeftTrigger
+        r = self.RightTrigger
+        udpad = self.UpDPad
+        ddpad = self.DownDPad
+        return [x, y, l, r, udpad, ddpad]
+
+    def _monitor_controller(self):
+        try:
+            get_gamepad()
+            self.gamepadCheck = 1
+        except:
+            self.gamepadCheck = 0
+        
+        while (self.padButton.isChecked() and self.gamepadCheck == 1):
+            try:
+                events = get_gamepad()
+                self.gamepadCheck = 1
+            except:
+                self.gamepadCheck = 0
+
+            for event in events:
+                if event.code == 'ABS_Y':
+                    self.LeftJoystickY = event.state / XboxController.MAX_JOY_VAL # normalize between -1 and 1
+                elif event.code == 'ABS_X':
+                    self.LeftJoystickX = event.state / XboxController.MAX_JOY_VAL # normalize between -1 and 1
+                elif event.code == 'ABS_RY':
+                    self.RightJoystickY = event.state / XboxController.MAX_JOY_VAL # normalize between -1 and 1
+                elif event.code == 'ABS_RX':
+                    self.RightJoystickX = event.state / XboxController.MAX_JOY_VAL # normalize between -1 and 1
+                elif event.code == 'ABS_Z':
+                    self.LeftTrigger = event.state / XboxController.MAX_TRIG_VAL # normalize between 0 and 1
+                elif event.code == 'ABS_RZ':
+                    self.RightTrigger = event.state / XboxController.MAX_TRIG_VAL # normalize between 0 and 1
+                elif event.code == 'BTN_TL':
+                    self.LeftBumper = event.state
+                elif event.code == 'BTN_TR':
+                    self.RightBumper = event.state
+                elif event.code == 'BTN_SOUTH':
+                    self.A = event.state
+                elif event.code == 'BTN_NORTH':
+                    self.X = event.state
+                elif event.code == 'BTN_WEST':
+                    self.Y = event.state
+                elif event.code == 'BTN_EAST':
+                    self.B = event.state
+                elif event.code == 'BTN_THUMBL':
+                    self.LeftThumb = event.state
+                elif event.code == 'BTN_THUMBR':
+                    self.RightThumb = event.state
+                elif event.code == 'BTN_SELECT':
+                    self.Back = event.state
+                elif event.code == 'BTN_START':
+                    self.Start = event.state
+                elif event.code == 'BTN_TRIGGER_HAPPY1':
+                    self.LeftDPad = event.state
+                elif event.code == 'BTN_TRIGGER_HAPPY2':
+                    self.RightDPad = event.state
+                elif event.code == 'BTN_TRIGGER_HAPPY3':
+                    self.UpDPad = event.state
+                elif event.code == 'BTN_TRIGGER_HAPPY4':
+                    self.DownDPad = event.state
 
 if __name__ == '__main__':
     main(sys.argv)
