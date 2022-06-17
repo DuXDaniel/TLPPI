@@ -1,21 +1,13 @@
 import numpy as np
 import math as math
-import matplotlib
-import matplotlib.pyplot as plt
 import time
-import tqdm
 import sys
-import json
-from fbs_runtime.application_context.PyQt5 import ApplicationContext
 from PyQt5.QtCore import QDateTime, Qt, QTimer, QObject, QThread, pyqtSignal, QRunnable
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit, QDial, QDialog, QGridLayout, QGroupBox,
                              QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton, QRadioButton, QScrollBar,
                              QSizePolicy, QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QTextEdit,
                              QVBoxLayout, QWidget, QHeaderView, QSpacerItem, QTableWidgetItem,
                              QTableWidgetSelectionRange, QAbstractItemView, QFileDialog, QPlainTextEdit)
-matplotlib.use('Qt5Agg')
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
 from inputs import get_gamepad
 import threading
 
@@ -36,11 +28,11 @@ def main(argv):
 class WidgetGallery(QDialog):
     def __init__(self, parent=None):
         self.serialNumber = 0
-        self.limitVoltage = 0
+        self.limitVoltage = [0]
         self.isMoving = 0
-        self.xVoltage = 0
-        self.yVoltage = 0
-        self.zVoltage = 0
+        self.xVoltage = [0]
+        self.yVoltage = [0]
+        self.zVoltage = [0]
         self.xValue = 0
         self.yValue = 0
         self.zValue = 0
@@ -195,11 +187,11 @@ class WidgetGallery(QDialog):
     def changeStyle(self, styleName):
         QApplication.setStyle(QStyleFactory.create(styleName))
 
-    def convertVoltageToVal(curVoltage):
-        return (65536 * (curVoltage/self.limitVoltage))
+    def convertVoltageToVal(self, curVoltage):
+        return (65536 * (curVoltage[0]/self.limitVoltage[0]))
     
-    def convertValToVoltage(curVal):
-        return ((curVal/65536) * self.limitVoltage)
+    def convertValToVoltage(self, curVal):
+        return ((curVal/65536) * self.limitVoltage[0])
 
     def connectPZCTRL(self):
         try:
@@ -225,7 +217,7 @@ class WidgetGallery(QDialog):
                     else:
                         self.updateStatus.appendPlainText("Connection attempt to " + str(self.serialNumber) + " success")
                         self.updateStatus.ensureCursorVisible()
-
+                        
                     result = mdtGetLimtVoltage(self.pzhdl, self.limitVoltage)
                     if(result<0):
                         self.updateStatus.appendPlainText("Voltage limit retreival of " + str(self.serialNumber) + " failed")
@@ -235,33 +227,36 @@ class WidgetGallery(QDialog):
                     else:
                         self.updateStatus.appendPlainText("Voltage limit retreival of " + str(self.serialNumber) + " success")
                         self.updateStatus.ensureCursorVisible()
-                    return self.pzhdl # returns first controller found
+                        
+                    # self.limitVoltage = 75
         except:
             return -1
         
-        self.serialStatus.setText(self.serialNumber)
+        print('Hello world')
+        self.serialStatus.setText(str(self.serialNumber))
         self.connectStatus.setText("On")
-        self.vlimStatus.setText(self.limitVoltage)
+        self.vlimStatus.setText(str(self.limitVoltage))
 
         mdtGetXAxisVoltage(self.pzhdl, self.xVoltage)
         mdtGetYAxisVoltage(self.pzhdl, self.yVoltage)
         mdtGetZAxisVoltage(self.pzhdl, self.zVoltage)
 
-        self.xVSliderValueText.setText(self.xVoltage)
-        self.xValue = convertVoltageToVal(self.xVoltage)
-        self.yVSliderValueText.setText(self.yVoltage)
-        self.yValue = convertVoltageToVal(self.yVoltage)
-        self.zVSliderValueText.setText(self.zVoltage)
-        self.zValue = convertVoltageToVal(self.zVoltage)
+        self.xVSliderValueText.setText(str(self.xVoltage))
+        self.xValue = self.convertVoltageToVal(self.xVoltage)
+        self.yVSliderValueText.setText(str(self.yVoltage))
+        self.yValue = self.convertVoltageToVal(self.yVoltage)
+        self.zVSliderValueText.setText(str(self.zVoltage))
+        self.zValue = self.convertVoltageToVal(self.zVoltage)
 
-        self.xVSlider.setValue(self.xValue)
-        self.yVSlider.setValue(self.yValue)
-        self.zVSlider.setValue(self.zValue)
+        self.xVSlider.setValue(int(self.xValue))
+        self.yVSlider.setValue(int(self.yValue))
+        self.zVSlider.setValue(int(self.zValue))
 
-        mdtGetVoltageAdjustmentResolution(self.pzhdl,self.stepArray[self.padStep])
-        self.voltageStepValueText.setText(self.stepArray[self.padStep])
+        self.voltageStepValueText.setText(str(self.stepArray[self.padStep]))
 
         self.voltageTracker()
+        
+        return self.pzhdl # returns first controller found
     
     def disconnectPZCTRL(self):
         if ((self.serialNumber != 0) and (mdtIsOpen(self.serialNumber) == 1)):
@@ -284,8 +279,8 @@ class WidgetGallery(QDialog):
         self.trackerThread = QThread()
         self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage)
         self.voltTracker.xVSVT.connect(self.xVSliderValueText.setText)
-        self.voltTracker.yVSVT.connect(self.xVSliderValueText.setText)
-        self.voltTracker.zVSVT.connect(self.xVSliderValueText.setText)
+        self.voltTracker.yVSVT.connect(self.yVSliderValueText.setText)
+        self.voltTracker.zVSVT.connect(self.zVSliderValueText.setText)
         self.voltTracker.moveToThread(self.trackerThread)
         self.trackerThread.started.connect(self.voltTracker.run)
         self.voltTracker.disconnect.connect(self.trackerThread.quit)
@@ -297,8 +292,8 @@ class WidgetGallery(QDialog):
         if (self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
             self.updateStatus.appendPlainText("Moving piezostage...")
             self.updateStatus.ensureCursorVisible()
-            self.xVoltage = self.convertValToVoltage(self.xVSlider.value)
-            mdtSetXAxisVoltage(self.xVoltage)
+            self.xVoltage = self.convertValToVoltage(self.xVSlider.value())
+            mdtSetXAxisVoltage(self.pzhdl, self.xVoltage)
             mdtGetXAxisVoltage(self.pzhdl, self.xVoltage)
             self.updateStatus.appendPlainText("Movement complete.")
             self.updateStatus.ensureCursorVisible()
@@ -308,8 +303,8 @@ class WidgetGallery(QDialog):
         if (self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
             self.updateStatus.appendPlainText("Moving piezostage...")
             self.updateStatus.ensureCursorVisible()
-            self.yVoltage = self.convertValToVoltage(self.yVSlider.value)
-            mdtSetYAxisVoltage(self.yVoltage)
+            self.yVoltage = self.convertValToVoltage(self.yVSlider.value())
+            mdtSetYAxisVoltage(self.pzhdl, self.yVoltage)
             mdtGetYAxisVoltage(self.pzhdl, self.yVoltage)
             self.updateStatus.appendPlainText("Movement complete.")
             self.updateStatus.ensureCursorVisible()
@@ -319,8 +314,8 @@ class WidgetGallery(QDialog):
         if (self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
             self.updateStatus.appendPlainText("Moving piezostage...")
             self.updateStatus.ensureCursorVisible()
-            self.zVoltage = self.convertValToVoltage(self.zVSlider.value)
-            mdtSetZAxisVoltage(self.zVoltage)
+            self.zVoltage = self.convertValToVoltage(self.zVSlider.value())
+            mdtSetZAxisVoltage(self.pzhdl, self.zVoltage)
             mdtGetZAxisVoltage(self.pzhdl, self.zVoltage)
             self.updateStatus.appendPlainText("Movement complete.")
             self.updateStatus.ensureCursorVisible()
@@ -408,16 +403,15 @@ class padWorker(QThread):
                 self.gamepadCheck = 0
             
             joyInputs = self.joy.read()
-            self.comms.emit(str(joyInputs))
 
             if (joyInputs[4] >= 0.25):
                 if (self.padStep < len(self.stepArray)-1):
                     self.padStep = self.padStep + 1
-                    self.stepComms.emit(self.stepArray[self.padStep])
+                    self.stepComms.emit(str(self.stepArray[self.padStep]))
             elif (joyInputs[5] >= 0.25):
                 if (self.padStep > 0):
                     self.padStep = self.padStep - 1
-                    self.stepComms.emit(self.stepArray[self.padStep])
+                    self.stepComms.emit(str(self.stepArray[self.padStep]))
 
             if (joyInputs[0] >= 0.25):
                 stepx = 1
@@ -489,9 +483,9 @@ class voltageWorker(QThread):
     yVSVT = pyqtSignal(str)
     zVSVT = pyqtSignal(str)
     disconnect = pyqtSignal()
-    xV = 0
-    yV = 0
-    zV = 0
+    xV = [0]
+    yV = [0]
+    zV = [0]
 
     def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage):
         super().__init__()
@@ -503,16 +497,16 @@ class voltageWorker(QThread):
 
     def run(self):
         while (mdtIsOpen(self.serialNumber) == 1):
-            mdtGetXAxisVoltage(self.pzhdl, xV)
-            mdtGetYAxisVoltage(self.pzhdl, yV)
-            mdtGetZAxisVoltage(self.pzhdl, zV)
-            self.xVoltage = xV
-            self.yVoltage = yV
-            self.zVoltage = zV
-            self.xVSVT.emit(str(xV))
-            self.yVSVT.emit(str(yV))
-            self.zVSVT.emit(str(zV))
-            sleep(0.5)
+            mdtGetXAxisVoltage(self.pzhdl, self.xV)
+            mdtGetYAxisVoltage(self.pzhdl, self.yV)
+            mdtGetZAxisVoltage(self.pzhdl, self.zV)
+            self.xVoltage = self.xV
+            self.yVoltage = self.yV
+            self.zVoltage = self.zV
+            self.xVSVT.emit(str(self.xV[0]))
+            self.yVSVT.emit(str(self.yV[0]))
+            self.zVSVT.emit(str(self.zV[0]))
+            time.sleep(0.5)
         self.disconnect.emit()
 
 class XboxController(object):

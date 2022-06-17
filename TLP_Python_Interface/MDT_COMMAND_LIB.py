@@ -1,7 +1,7 @@
 from ctypes import *
 
 #region import dll functions
-mdtLib = cdll.LoadLibrary("./MDT_COMMAND_LIB_x64.dll")
+mdtLib = cdll.LoadLibrary("./MDT_COMMAND_LIB_win32.dll")
 cmdOpen = mdtLib.Open
 cmdOpen.restype=c_int
 cmdOpen.argtypes=[c_char_p, c_int, c_int]
