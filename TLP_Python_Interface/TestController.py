@@ -1,6 +1,7 @@
 from inputs import get_gamepad
 import math
 import threading
+import time
 
 class XboxController(object):
     MAX_TRIG_VAL = math.pow(2, 8)
@@ -24,10 +25,8 @@ class XboxController(object):
         self.RightThumb = 0
         self.Back = 0
         self.Start = 0
-        self.LeftDPad = 0
-        self.RightDPad = 0
-        self.UpDPad = 0
-        self.DownDPad = 0
+        self.LRDPad = 0
+        self.UDDPad = 0
 
         self._monitor_thread = threading.Thread(target=self._monitor_controller, args=())
         self._monitor_thread.daemon = True
@@ -35,18 +34,13 @@ class XboxController(object):
 
 
     def read(self): # return the buttons/triggers that you care about in this methode
-        x = self.LeftJoystickX
-        y = self.LeftJoystickY
-        a = self.A
-        b = self.X # b=1, x=2
-        rb = self.RightBumper
-        return [x, y, a, b, rb]
-
+        return [self.LeftJoystickX, self.LeftJoystickY, self.LeftTrigger, self.RightTrigger, self.UDDPad, self.LRDPad, self.LeftBumper, self.RightBumper, self.A, self.X, self.Y, self.B, self.LeftThumb, self.RightThumb, self.Back, self.Start]
 
     def _monitor_controller(self):
         while True:
             events = get_gamepad()
             for event in events:
+                print(event.code)
                 if event.code == 'ABS_Y':
                     self.LeftJoystickY = event.state / XboxController.MAX_JOY_VAL # normalize between -1 and 1
                 elif event.code == 'ABS_X':
@@ -79,14 +73,10 @@ class XboxController(object):
                     self.Back = event.state
                 elif event.code == 'BTN_START':
                     self.Start = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY1':
-                    self.LeftDPad = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY2':
-                    self.RightDPad = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY3':
-                    self.UpDPad = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY4':
-                    self.DownDPad = event.state
+                elif event.code == 'ABS_HAT0X':
+                    self.LRDPad = event.state
+                elif event.code == 'ABS_HAT0Y':
+                    self.UDDPad = event.state
 
 
 
@@ -95,3 +85,4 @@ if __name__ == '__main__':
     joy = XboxController()
     while True:
         print(joy.read())
+        time.sleep(0.5)

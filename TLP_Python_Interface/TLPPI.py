@@ -31,8 +31,11 @@ class WidgetGallery(QDialog):
         self.limitVoltage = [0]
         self.isMoving = 0
         self.xVoltage = [0]
+        self.xV = 0 # temp set variable to prevent overwrite of array to float
         self.yVoltage = [0]
+        self.yV = 0 # temp set variable to prevent overwrite of array to float
         self.zVoltage = [0]
+        self.zV = 0 # temp set variable to prevent overwrite of array to float
         self.xValue = 0
         self.yValue = 0
         self.zValue = 0
@@ -56,20 +59,6 @@ class WidgetGallery(QDialog):
         self.changeStyle('windowsvista')
 
         self.joy = XboxController(self.freeControlButton)
-
-        self.padThread = QThread()
-        self.padTracker = padWorker(self.serialNumber, self.pzhdl, self.freeControlButton, self.xVoltage, self.yVoltage, self.zVoltage, self.padStep, self.limitVoltage, self.joy, self.stepArray)
-        self.padTracker.comms.connect(self.updateStatus.appendPlainText)
-        self.padTracker.xVSChange.connect(self.xVSlider.setValue)
-        self.padTracker.yVSChange.connect(self.yVSlider.setValue)
-        self.padTracker.zVSChange.connect(self.zVSlider.setValue)
-        self.padTracker.stepComms.connect(self.voltageStepValueText.setText)
-        self.padTracker.moveToThread(self.padThread)
-        self.padThread.started.connect(self.padTracker.run)
-        self.padTracker.disconnect.connect(self.padDisconnect)
-        self.padTracker.disconnect.connect(self.padThread.quit)
-        self.padTracker.disconnect.connect(self.padTracker.deleteLater)
-        self.padThread.finished.connect(self.padThread.deleteLater)
 
     def overallWidget(self):
 
@@ -132,7 +121,7 @@ class WidgetGallery(QDialog):
         self.xVSlider.setMaximum(65536)
         self.xVSlider.sliderReleased.connect(self.moveXVSlider)
 
-        self.yVSliderText = QLabel("X-Axis Voltage: ")
+        self.yVSliderText = QLabel("Y-Axis Voltage: ")
         self.yVSliderValueText = QLabel("")
         self.yVSlider = QSlider(Qt.Horizontal)
         self.yVSlider.setFocusPolicy(Qt.StrongFocus)
@@ -143,7 +132,7 @@ class WidgetGallery(QDialog):
         self.yVSlider.setMaximum(65536)
         self.yVSlider.sliderReleased.connect(self.moveYVSlider)
 
-        self.zVSliderText = QLabel("X-Axis Voltage: ")
+        self.zVSliderText = QLabel("Z-Axis Voltage: ")
         self.zVSliderValueText = QLabel("")
         self.zVSlider = QSlider(Qt.Horizontal)
         self.zVSlider.setFocusPolicy(Qt.StrongFocus)
@@ -254,6 +243,20 @@ class WidgetGallery(QDialog):
 
         self.voltageTracker()
         
+        self.padThread = QThread()
+        self.padTracker = padWorker(self.serialNumber, self.pzhdl, self.freeControlButton, self.xVoltage, self.yVoltage, self.zVoltage, self.padStep, self.limitVoltage, self.joy, self.stepArray)
+        self.padTracker.comms.connect(self.updateStatus.appendPlainText)
+        self.padTracker.xVSChange.connect(self.xVSlider.setValue)
+        self.padTracker.yVSChange.connect(self.yVSlider.setValue)
+        self.padTracker.zVSChange.connect(self.zVSlider.setValue)
+        self.padTracker.stepComms.connect(self.voltageStepValueText.setText)
+        self.padTracker.moveToThread(self.padThread)
+        self.padThread.started.connect(self.padTracker.run)
+        self.padTracker.disconnect.connect(self.padDisconnect)
+        self.padTracker.disconnect.connect(self.padThread.quit)
+        self.padTracker.disconnect.connect(self.padTracker.deleteLater)
+        self.padThread.finished.connect(self.padThread.deleteLater)
+        
         return self.pzhdl # returns first controller found
     
     def disconnectPZCTRL(self):
@@ -290,8 +293,10 @@ class WidgetGallery(QDialog):
         if (self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
             self.updateStatus.appendPlainText("Moving piezostage...")
             self.updateStatus.ensureCursorVisible()
-            self.xVoltage = self.convertValToVoltage(self.xVSlider.value())
-            mdtSetXAxisVoltage(self.pzhdl, self.xVoltage[0])
+            self.xVoltage[0] = self.convertValToVoltage(self.xVSlider.value())
+            self.xV = self.xVoltage[0]
+            mdtSetXAxisVoltage(self.pzhdl, self.xV)
+            time.sleep(0.1)
             mdtGetXAxisVoltage(self.pzhdl, self.xVoltage)
             self.updateStatus.appendPlainText("Movement complete.")
             self.updateStatus.ensureCursorVisible()
@@ -301,8 +306,10 @@ class WidgetGallery(QDialog):
         if (self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
             self.updateStatus.appendPlainText("Moving piezostage...")
             self.updateStatus.ensureCursorVisible()
-            self.yVoltage = self.convertValToVoltage(self.yVSlider.value())
-            mdtSetYAxisVoltage(self.pzhdl, self.yVoltage[0])
+            self.yVoltage[0] = self.convertValToVoltage(self.yVSlider.value())
+            self.yV = self.yVoltage[0]
+            mdtSetYAxisVoltage(self.pzhdl, self.yV)
+            time.sleep(0.1)
             mdtGetYAxisVoltage(self.pzhdl, self.yVoltage)
             self.updateStatus.appendPlainText("Movement complete.")
             self.updateStatus.ensureCursorVisible()
@@ -312,8 +319,10 @@ class WidgetGallery(QDialog):
         if (self.serialNumber != 0 and mdtIsOpen(self.serialNumber) == 1):
             self.updateStatus.appendPlainText("Moving piezostage...")
             self.updateStatus.ensureCursorVisible()
-            self.zVoltage = self.convertValToVoltage(self.zVSlider.value())
-            mdtSetZAxisVoltage(self.pzhdl, self.zVoltage[0])
+            self.zVoltage[0] = self.convertValToVoltage(self.zVSlider.value())
+            self.zV = self.zVoltage[0]
+            mdtSetZAxisVoltage(self.pzhdl, self.zV)
+            time.sleep(0.1)
             mdtGetZAxisVoltage(self.pzhdl, self.zVoltage)
             self.updateStatus.appendPlainText("Movement complete.")
             self.updateStatus.ensureCursorVisible()
@@ -358,6 +367,9 @@ class padWorker(QThread):
     xVSChange = pyqtSignal(int)
     yVSChange = pyqtSignal(int)
     zVSChange = pyqtSignal(int)
+    xV = 0
+    yV = 0
+    zV = 0
     stepx = 0
     stepy = 0
     stepz = 0
@@ -365,6 +377,7 @@ class padWorker(QThread):
     sliderYVal = 0
     sliderZVal = 0
     gamepadCheck = 0
+    candidateVoltage = 0
     joyInputs = []
 
     def __init__(self, serialNumber, pzhdl, toggleButton, xVoltage, yVoltage, zVoltage, padStep, limitVoltage, joy, stepArray):
@@ -380,11 +393,11 @@ class padWorker(QThread):
         self.joy = joy
         self.stepArray = stepArray
     
-    def convertVoltageToVal(curVoltage):
-        return (65536 * (curVoltage/self.limitVoltage))
+    def convertVoltageToVal(self, curVoltage):
+        return (65536 * (curVoltage/self.limitVoltage[0]))
     
-    def convertValToVoltage(curVal):
-        return ((curVal/65536) * self.limitVoltage)
+    def convertValToVoltage(self, curVal):
+        return ((curVal/65536) * self.limitVoltage[0])
     
     def run(self):
         try:
@@ -403,11 +416,11 @@ class padWorker(QThread):
             
             self.joyInputs = self.joy.read()
 
-            if (self.joyInputs[4] >= 0.25):
+            if (self.joyInputs[4] <= -0.25):
                 if (self.padStep < len(self.stepArray)-1):
                     self.padStep = self.padStep + 1
                     self.stepComms.emit(str(self.stepArray[self.padStep]))
-            elif (self.joyInputs[5] >= 0.25):
+            elif (self.joyInputs[4] >= 0.25):
                 if (self.padStep > 0):
                     self.padStep = self.padStep - 1
                     self.stepComms.emit(str(self.stepArray[self.padStep]))
@@ -434,45 +447,52 @@ class padWorker(QThread):
                 self.stepz = 0
 
             if (self.stepx != 0):
-                candidateVoltage = self.xVoltage[0] + self.stepx*self.stepArray(self.padStep)*self.limitVoltage[0]
-                if (candidateVoltage > self.limitVoltage[0]):
-                    mdtSetXAxisVoltage(self.pzhdl,self.limitVoltage[0])
-                elif (candidateVoltage < 0):
-                    mdtSetXAxisVoltage(self.pzhdl,0)
+                self.candidateVoltage = self.xVoltage[0] + self.stepx*self.stepArray[self.padStep]*self.limitVoltage[0]
+                if (self.candidateVoltage > self.limitVoltage[0]):
+                    self.xV = self.limitVoltage[0]
+                    mdtSetXAxisVoltage(self.pzhdl,self.xV)
+                elif (self.candidateVoltage < 0):
+                    self.xV = 0
+                    mdtSetXAxisVoltage(self.pzhdl,self.xV)
                 else:
-                    mdtSetXAxisVoltage(self.pzhdl,candidateVoltage)
+                    self.xV = self.candidateVoltage
+                    mdtSetXAxisVoltage(self.pzhdl,self.xV)
             
-            if (stepy != 0):
-                candidateVoltage = self.yVoltage[0] + self.stepy*self.stepArray(self.padStep)*self.limitVoltage[0]
-                if (candidateVoltage > self.limitVoltage[0]):
-                    mdtSetYAxisVoltage(self.pzhdl,self.limitVoltage[0])
-                elif (candidateVoltage < 0):
-                    mdtSetYAxisVoltage(self.pzhdl,0)
+            if (self.stepy != 0):
+                self.candidateVoltage = self.yVoltage[0] + self.stepy*self.stepArray[self.padStep]*self.limitVoltage[0]
+                if (self.candidateVoltage > self.limitVoltage[0]):
+                    self.yV = self.limitVoltage[0]
+                    mdtSetYAxisVoltage(self.pzhdl,self.yV)
+                elif (self.candidateVoltage < 0):
+                    self.yV = 0
+                    mdtSetYAxisVoltage(self.pzhdl,self.yV)
                 else:
-                    mdtSetYAxisVoltage(self.pzhdl,candidateVoltage)
+                    self.yV = self.candidateVoltage
+                    mdtSetYAxisVoltage(self.pzhdl,self.yV)
 
-            if (stepz != 0):
-                candidateVoltage = self.zVoltage[0] + self.stepz*self.stepArray(self.padStep)*self.limitVoltage[0]
-                if (candidateVoltage > self.limitVoltage[0]):
-                    mdtSetZAxisVoltage(self.pzhdl,self.limitVoltage[0])
-                elif (candidateVoltage < 0):
-                    mdtSetZAxisVoltage(self.pzhdl,0)
+            if (self.stepz != 0):
+                self.candidateVoltage = self.zVoltage[0] + self.stepz*self.stepArray[self.padStep]*self.limitVoltage[0]
+                if (self.candidateVoltage > self.limitVoltage[0]):
+                    self.zV = self.limitVoltage[0]
+                    mdtSetZAxisVoltage(self.pzhdl,self.self.zV)
+                elif (self.candidateVoltage < 0):
+                    self.zV = 0
+                    mdtSetZAxisVoltage(self.pzhdl,self.zV)
                 else:
-                    mdtSetZAxisVoltage(self.pzhdl,candidateVoltage)
+                    self.zV = self.candidateVoltage
+                    mdtSetZAxisVoltage(self.pzhdl,self.zV)
 
             mdtGetXAxisVoltage(self.pzhdl, self.xVoltage)
             mdtGetYAxisVoltage(self.pzhdl, self.yVoltage)
             mdtGetZAxisVoltage(self.pzhdl, self.zVoltage)
 
-            sliderXVal = int(convertVoltageToVal(self.xVoltage[0]))
-            sliderYVal = int(convertVoltageToVal(self.yVoltage[0]))
-            sliderZVal = int(convertVoltageToVal(self.zVoltage[0]))
+            self.sliderXVal = int(self.convertVoltageToVal(self.xVoltage[0]))
+            self.sliderYVal = int(self.convertVoltageToVal(self.yVoltage[0]))
+            self.sliderZVal = int(self.convertVoltageToVal(self.zVoltage[0]))
                 
-            self.xVSChange.emit(sliderXVal)
-            self.yVSChange.emit(sliderYVal)
-            self.zVSChange.emit(sliderZVal)
-
-            time.sleep(0.5)
+            self.xVSChange.emit(self.sliderXVal)
+            self.yVSChange.emit(self.sliderYVal)
+            self.zVSChange.emit(self.sliderZVal)
 
             # how to kill controller thread at end?
         self.disconnect.emit()
@@ -532,10 +552,8 @@ class XboxController(object):
         self.RightThumb = 0
         self.Back = 0
         self.Start = 0
-        self.LeftDPad = 0
-        self.RightDPad = 0
-        self.UpDPad = 0
-        self.DownDPad = 0
+        self.LRDPad = 0
+        self.UDDPad = 0
 
     def startThread(self):
         self._monitor_thread = threading.Thread(target=self._monitor_controller, args=())
@@ -543,13 +561,7 @@ class XboxController(object):
         self._monitor_thread.start()
 
     def read(self): # return the buttons/triggers that you care about in this methode
-        x = self.LeftJoystickX
-        y = self.LeftJoystickY
-        l = self.LeftTrigger
-        r = self.RightTrigger
-        udpad = self.UpDPad
-        ddpad = self.DownDPad
-        return [x, y, l, r, udpad, ddpad]
+        return [self.LeftJoystickX, self.LeftJoystickY, self.LeftTrigger, self.RightTrigger, self.UDDPad]
 
     def _monitor_controller(self):
         try:
@@ -598,14 +610,10 @@ class XboxController(object):
                     self.Back = event.state
                 elif event.code == 'BTN_START':
                     self.Start = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY1':
-                    self.LeftDPad = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY2':
-                    self.RightDPad = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY3':
-                    self.UpDPad = event.state
-                elif event.code == 'BTN_TRIGGER_HAPPY4':
-                    self.DownDPad = event.state
+                elif event.code == 'ABS_HAT0X':
+                    self.LRDPad = event.state
+                elif event.code == 'ABS_HAT0Y':
+                    self.UDDPad = event.state
 
 if __name__ == '__main__':
     main(sys.argv)
