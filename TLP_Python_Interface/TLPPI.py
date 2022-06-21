@@ -355,6 +355,7 @@ class WidgetGallery(QDialog):
         return -1
     
     def padDisconnect(self):
+        self.joy.endThread()
         self.freeControlButton.setStyleSheet("background-color : lightgrey")
         self.padControlToggle = 0
         self.padControlToggle = 0
@@ -414,7 +415,10 @@ class padWorker(QThread):
             except:
                 self.gamepadCheck = 0
             
-            self.joyInputs = self.joy.read()
+            if (self.gamepadCheck == 1):
+                self.joyInputs = self.joy.read()
+            else:
+                self.joyInputs = [0,0,0,0,0]
 
             if (self.joyInputs[4] <= -0.25):
                 if (self.padStep < len(self.stepArray)-1):
@@ -559,6 +563,9 @@ class XboxController(object):
         self._monitor_thread = threading.Thread(target=self._monitor_controller, args=())
         self._monitor_thread.daemon = True
         self._monitor_thread.start()
+    
+    def endThread(self):
+        self._monitor_thread.join()
 
     def read(self): # return the buttons/triggers that you care about in this methode
         return [self.LeftJoystickX, self.LeftJoystickY, self.LeftTrigger, self.RightTrigger, self.UDDPad]
