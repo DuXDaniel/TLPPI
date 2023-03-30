@@ -249,6 +249,9 @@ class WidgetGallery(QDialog):
         self.padTracker.xVSChange.connect(self.xVSlider.setValue)
         self.padTracker.yVSChange.connect(self.yVSlider.setValue)
         self.padTracker.zVSChange.connect(self.zVSlider.setValue)
+        self.padTracker.xVTChange.connect(self.xVSliderValueText.setText)
+        self.padTracker.yVTChange.connect(self.yVSliderValueText.setText)
+        self.padTracker.zVTChange.connect(self.zVSliderValueText.setText)
         self.padTracker.stepComms.connect(self.voltageStepValueText.setText)
         self.padTracker.moveToThread(self.padThread)
         self.padThread.started.connect(self.padTracker.run)
@@ -355,9 +358,7 @@ class WidgetGallery(QDialog):
         return -1
     
     def padDisconnect(self):
-        self.joy.endThread()
         self.freeControlButton.setStyleSheet("background-color : lightgrey")
-        self.padControlToggle = 0
         self.padControlToggle = 0
         self.freeControlButton.setChecked(False)
 
@@ -368,6 +369,9 @@ class padWorker(QThread):
     xVSChange = pyqtSignal(int)
     yVSChange = pyqtSignal(int)
     zVSChange = pyqtSignal(int)
+    xVTChange = pyqtSignal(str)
+    yVTChange = pyqtSignal(str)
+    zVTChange = pyqtSignal(str)
     xV = 0
     yV = 0
     zV = 0
@@ -377,7 +381,6 @@ class padWorker(QThread):
     sliderXVal = 0
     sliderYVal = 0
     sliderZVal = 0
-    gamepadCheck = 0
     candidateVoltage = 0
     joyInputs = []
 
@@ -401,24 +404,8 @@ class padWorker(QThread):
         return ((curVal/65536) * self.limitVoltage[0])
     
     def run(self):
-        try:
-            get_gamepad()
-            self.gamepadCheck = 1
-        except:
-            self.gamepadCheck = 0
-
-        while (self.toggleButton.isChecked() and self.gamepadCheck == 1):
-
-            try:
-                get_gamepad()
-                self.gamepadCheck = 1
-            except:
-                self.gamepadCheck = 0
-            
-            if (self.gamepadCheck == 1):
-                self.joyInputs = self.joy.read()
-            else:
-                self.joyInputs = [0,0,0,0,0]
+        while (self.toggleButton.isChecked() and self.joy.joyStatus() == 1):
+            self.joyInputs = self.joy.read()
 
             if (self.joyInputs[4] <= -0.25):
                 if (self.padStep < len(self.stepArray)-1):
@@ -430,25 +417,25 @@ class padWorker(QThread):
                     self.stepComms.emit(str(self.stepArray[self.padStep]))
 
             if (self.joyInputs[0] >= 0.25):
-                self.stepx = 1
-            elif (self.joyInputs[0] <= -0.25):
-                self.stepx = -1
-            else:
-                self.stepx = 0
-            
-            if (self.joyInputs[1] >= 0.25):
                 self.stepy = 1
-            elif (self.joyInputs[1] <= -0.25):
+            elif (self.joyInputs[0] <= -0.25):
                 self.stepy = -1
             else:
                 self.stepy = 0
-
-            if (self.joyInputs[3] >= 0.25 and self.joyInputs[2] < 0.25):
+            
+            if (self.joyInputs[1] >= 0.25):
                 self.stepz = 1
-            elif (self.joyInputs[2] >= 0.25 and self.joyInputs[3] < 0.25):
+            elif (self.joyInputs[1] <= -0.25):
                 self.stepz = -1
             else:
                 self.stepz = 0
+
+            if (self.joyInputs[3] >= 0.25 and self.joyInputs[2] < 0.25):
+                self.stepx = 1
+            elif (self.joyInputs[2] >= 0.25 and self.joyInputs[3] < 0.25):
+                self.stepx = -1
+            else:
+                self.stepx = 0
 
             if (self.stepx != 0):
                 self.candidateVoltage = self.xVoltage[0] + self.stepx*self.stepArray[self.padStep]*self.limitVoltage[0]
@@ -497,8 +484,11 @@ class padWorker(QThread):
             self.xVSChange.emit(self.sliderXVal)
             self.yVSChange.emit(self.sliderYVal)
             self.zVSChange.emit(self.sliderZVal)
+            self.xVTChange.emit(str(self.xVoltage[0]))
+            self.yVTChange.emit(str(self.yVoltage[0]))
+            self.zVTChange.emit(str(self.zVoltage[0]))
 
-            # how to kill controller thread at end?
+            time.sleep(0.1)
         self.disconnect.emit()
 
 class voltageWorker(QThread):
@@ -521,7 +511,7 @@ class voltageWorker(QThread):
 
     def run(self):
         while (mdtIsOpen(self.serialNumber) == 1):
-            if (self.padButton.isChecked() != 0):
+            if (self.padButton.isChecked() == 0):
                 mdtGetXAxisVoltage(self.pzhdl, self.xV)
                 mdtGetYAxisVoltage(self.pzhdl, self.yV)
                 mdtGetZAxisVoltage(self.pzhdl, self.zV)
@@ -568,6 +558,9 @@ class XboxController(object):
     
     def endThread(self):
         self._monitor_thread.join()
+
+    def joyStatus(self):
+        return self.gamepadCheck
 
     def read(self): # return the buttons/triggers that you care about in this methode
         return [self.LeftJoystickX, self.LeftJoystickY, self.LeftTrigger, self.RightTrigger, self.UDDPad]
