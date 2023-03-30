@@ -278,7 +278,7 @@ class WidgetGallery(QDialog):
 
     def voltageTracker(self):
         self.trackerThread = QThread()
-        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage)
+        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage, self.freeControlButton)
         self.voltTracker.xVSVT.connect(self.xVSliderValueText.setText)
         self.voltTracker.yVSVT.connect(self.yVSliderValueText.setText)
         self.voltTracker.zVSVT.connect(self.zVSliderValueText.setText)
@@ -510,26 +510,28 @@ class voltageWorker(QThread):
     yV = [0]
     zV = [0]
 
-    def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage):
+    def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage, padButton):
         super().__init__()
         self.serialNumber = serialNumber
         self.pzhdl = pzhdl
         self.xVoltage = xVoltage
         self.yVoltage = yVoltage
         self.zVoltage = zVoltage
+        self.padButton = padButton
 
     def run(self):
         while (mdtIsOpen(self.serialNumber) == 1):
-            mdtGetXAxisVoltage(self.pzhdl, self.xV)
-            mdtGetYAxisVoltage(self.pzhdl, self.yV)
-            mdtGetZAxisVoltage(self.pzhdl, self.zV)
-            self.xVoltage = self.xV
-            self.yVoltage = self.yV
-            self.zVoltage = self.zV
-            self.xVSVT.emit(str(self.xV[0]))
-            self.yVSVT.emit(str(self.yV[0]))
-            self.zVSVT.emit(str(self.zV[0]))
-            time.sleep(0.5)
+            if (self.padButton.isChecked() != 0):
+                mdtGetXAxisVoltage(self.pzhdl, self.xV)
+                mdtGetYAxisVoltage(self.pzhdl, self.yV)
+                mdtGetZAxisVoltage(self.pzhdl, self.zV)
+                self.xVoltage = self.xV
+                self.yVoltage = self.yV
+                self.zVoltage = self.zV
+                self.xVSVT.emit(str(self.xV[0]))
+                self.yVSVT.emit(str(self.yV[0]))
+                self.zVSVT.emit(str(self.zV[0]))
+                time.sleep(0.5)
         self.disconnect.emit()
 
 class XboxController(object):
