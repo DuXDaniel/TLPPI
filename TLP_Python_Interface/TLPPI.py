@@ -90,6 +90,9 @@ class WidgetGallery(QDialog):
         self.connectStatus = QLabel("Off")
         self.vlimText = QLabel("Voltage Limit (V): ")
         self.vlimStatus = QLabel("0")
+        self.distText = QLabel("Distance (um):")
+        self.distEntry = QLineEdit("1")
+        self.distEntry.setFixedWidth(50)
         self.movingText = QLabel("Moving: ")
         self.movingStatus = QLabel("No")
         self.updateText = QLabel("Status Updates:")
@@ -102,15 +105,17 @@ class WidgetGallery(QDialog):
         self.statusLayout.addWidget(self.connectStatus, 1, 1, 1, 1, alignment=Qt.AlignRight)
         self.statusLayout.addWidget(self.vlimText, 2, 0, 1, 1)
         self.statusLayout.addWidget(self.vlimStatus, 2, 1, 1, 1, alignment=Qt.AlignRight)
-        self.statusLayout.addWidget(self.movingText, 3, 0, 1, 1)
-        self.statusLayout.addWidget(self.movingStatus, 3, 1, 1, 1, alignment=Qt.AlignRight)
+        self.statusLayout.addWidget(self.distText, 3, 0, 1, 1)
+        self.statusLayout.addWidget(self.distEntry, 3, 1, 1, 1, alignment=Qt.AlignRight)
+        self.statusLayout.addWidget(self.movingText, 4, 0, 1, 1)
+        self.statusLayout.addWidget(self.movingStatus, 4, 1, 1, 1, alignment=Qt.AlignRight)
         self.statusLayout.addWidget(self.updateText, 0, 2, 1, 1)
         self.statusLayout.addWidget(self.updateStatus, 1, 2, 3, 1)
         self.statusLayout.setRowStretch(4,1)
         self.statusLayout.setVerticalSpacing(0)
         self.statusGroupBox.setLayout(self.statusLayout)
 
-        self.xVSliderText = QLabel("X-Axis Voltage: ")
+        self.xVSliderText = QLabel("X-Axis: ")
         self.xVSliderValueText = QLabel("")
         self.xVSlider = QSlider(Qt.Horizontal)
         self.xVSlider.setFocusPolicy(Qt.StrongFocus)
@@ -121,7 +126,7 @@ class WidgetGallery(QDialog):
         self.xVSlider.setMaximum(65536)
         self.xVSlider.sliderReleased.connect(self.moveXVSlider)
 
-        self.yVSliderText = QLabel("Y-Axis Voltage: ")
+        self.yVSliderText = QLabel("Y-Axis: ")
         self.yVSliderValueText = QLabel("")
         self.yVSlider = QSlider(Qt.Horizontal)
         self.yVSlider.setFocusPolicy(Qt.StrongFocus)
@@ -132,7 +137,7 @@ class WidgetGallery(QDialog):
         self.yVSlider.setMaximum(65536)
         self.yVSlider.sliderReleased.connect(self.moveYVSlider)
 
-        self.zVSliderText = QLabel("Z-Axis Voltage: ")
+        self.zVSliderText = QLabel("Z-Axis: ")
         self.zVSliderValueText = QLabel("")
         self.zVSlider = QSlider(Qt.Horizontal)
         self.zVSlider.setFocusPolicy(Qt.StrongFocus)
@@ -244,7 +249,7 @@ class WidgetGallery(QDialog):
         self.voltageTracker()
         
         self.padThread = QThread()
-        self.padTracker = padWorker(self.serialNumber, self.pzhdl, self.freeControlButton, self.xVoltage, self.yVoltage, self.zVoltage, self.padStep, self.limitVoltage, self.joy, self.stepArray)
+        self.padTracker = padWorker(self.serialNumber, self.pzhdl, self.freeControlButton, self.xVoltage, self.yVoltage, self.zVoltage, self.padStep, self.limitVoltage, self.joy, self.stepArray, self.distEntry)
         self.padTracker.comms.connect(self.updateStatus.appendPlainText)
         self.padTracker.xVSChange.connect(self.xVSlider.setValue)
         self.padTracker.yVSChange.connect(self.yVSlider.setValue)
@@ -281,7 +286,7 @@ class WidgetGallery(QDialog):
 
     def voltageTracker(self):
         self.trackerThread = QThread()
-        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage, self.freeControlButton)
+        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage, self.freeControlButton, self.distEntry)
         self.voltTracker.xVSVT.connect(self.xVSliderValueText.setText)
         self.voltTracker.yVSVT.connect(self.yVSliderValueText.setText)
         self.voltTracker.zVSVT.connect(self.zVSliderValueText.setText)
@@ -384,7 +389,7 @@ class padWorker(QThread):
     candidateVoltage = 0
     joyInputs = []
 
-    def __init__(self, serialNumber, pzhdl, toggleButton, xVoltage, yVoltage, zVoltage, padStep, limitVoltage, joy, stepArray):
+    def __init__(self, serialNumber, pzhdl, toggleButton, xVoltage, yVoltage, zVoltage, padStep, limitVoltage, joy, stepArray, distEntry):
         super().__init__()
         self.toggleButton = toggleButton
         self.serialNumber = serialNumber
@@ -396,6 +401,7 @@ class padWorker(QThread):
         self.limitVoltage = limitVoltage
         self.joy = joy
         self.stepArray = stepArray
+        self.distEntry = distEntry
     
     def convertVoltageToVal(self, curVoltage):
         return (65536 * (curVoltage/self.limitVoltage[0]))
@@ -484,9 +490,14 @@ class padWorker(QThread):
             self.xVSChange.emit(self.sliderXVal)
             self.yVSChange.emit(self.sliderYVal)
             self.zVSChange.emit(self.sliderZVal)
-            self.xVTChange.emit(str(self.xVoltage[0]))
-            self.yVTChange.emit(str(self.yVoltage[0]))
-            self.zVTChange.emit(str(self.zVoltage[0]))
+
+            try:
+                distScale = float(self.distEntry.text().strip())/self.limitVoltage
+            except:
+                distScale = 1
+            self.xVTChange.emit(str(self.xVoltage[0]*distScale))
+            self.yVTChange.emit(str(self.yVoltage[0]*distScale))
+            self.zVTChange.emit(str(self.zVoltage[0]*distScale))
 
             time.sleep(0.1)
         self.disconnect.emit()
@@ -500,7 +511,7 @@ class voltageWorker(QThread):
     yV = [0]
     zV = [0]
 
-    def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage, padButton):
+    def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage, padButton, distEntry):
         super().__init__()
         self.serialNumber = serialNumber
         self.pzhdl = pzhdl
@@ -508,19 +519,24 @@ class voltageWorker(QThread):
         self.yVoltage = yVoltage
         self.zVoltage = zVoltage
         self.padButton = padButton
+        self.distEntry = distEntry
 
     def run(self):
         while (mdtIsOpen(self.serialNumber) == 1):
             if (self.padButton.isChecked() == 0):
+                try:
+                    distScale = float(self.distEntry.text().strip())/self.limitVoltage
+                except:
+                    distScale = 1
                 mdtGetXAxisVoltage(self.pzhdl, self.xV)
                 mdtGetYAxisVoltage(self.pzhdl, self.yV)
                 mdtGetZAxisVoltage(self.pzhdl, self.zV)
                 self.xVoltage = self.xV
                 self.yVoltage = self.yV
                 self.zVoltage = self.zV
-                self.xVSVT.emit(str(self.xV[0]))
-                self.yVSVT.emit(str(self.yV[0]))
-                self.zVSVT.emit(str(self.zV[0]))
+                self.xVSVT.emit(str(self.xV[0]*distScale))
+                self.yVSVT.emit(str(self.yV[0]*distScale))
+                self.zVSVT.emit(str(self.zV[0]*distScale))
                 time.sleep(0.5)
         self.disconnect.emit()
 
