@@ -91,7 +91,7 @@ class WidgetGallery(QDialog):
         self.vlimText = QLabel("Voltage Limit (V): ")
         self.vlimStatus = QLabel("0")
         self.distText = QLabel("Distance (um):")
-        self.distEntry = QLineEdit("1")
+        self.distEntry = QLineEdit("20")
         self.distEntry.setFixedWidth(50)
         self.movingText = QLabel("Moving: ")
         self.movingStatus = QLabel("No")
@@ -233,11 +233,15 @@ class WidgetGallery(QDialog):
         mdtGetYAxisVoltage(self.pzhdl, self.yVoltage)
         mdtGetZAxisVoltage(self.pzhdl, self.zVoltage)
 
-        self.xVSliderValueText.setText(str(self.xVoltage[0]))
+        try:
+            distScale = float(self.distEntry.text().strip())/self.limitVoltage[0]
+        except:
+            distScale = 1
+        self.xVSliderValueText.setText(str(self.xVoltage[0]*distScale))
         self.xValue = self.convertVoltageToVal(self.xVoltage[0])
-        self.yVSliderValueText.setText(str(self.yVoltage[0]))
+        self.yVSliderValueText.setText(str(self.yVoltage[0]*distScale))
         self.yValue = self.convertVoltageToVal(self.yVoltage[0])
-        self.zVSliderValueText.setText(str(self.zVoltage[0]))
+        self.zVSliderValueText.setText(str(self.zVoltage[0]*distScale))
         self.zValue = self.convertVoltageToVal(self.zVoltage[0])
 
         self.xVSlider.setValue(int(self.xValue))
@@ -286,7 +290,7 @@ class WidgetGallery(QDialog):
 
     def voltageTracker(self):
         self.trackerThread = QThread()
-        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage, self.freeControlButton, self.distEntry)
+        self.voltTracker = voltageWorker(self.serialNumber, self.pzhdl, self.xVoltage, self.yVoltage, self.zVoltage, self.freeControlButton, self.distEntry, self.limitVoltage)
         self.voltTracker.xVSVT.connect(self.xVSliderValueText.setText)
         self.voltTracker.yVSVT.connect(self.yVSliderValueText.setText)
         self.voltTracker.zVSVT.connect(self.zVSliderValueText.setText)
@@ -492,7 +496,7 @@ class padWorker(QThread):
             self.zVSChange.emit(self.sliderZVal)
 
             try:
-                distScale = float(self.distEntry.text().strip())/self.limitVoltage
+                distScale = float(self.distEntry.text().strip())/self.limitVoltage[0]
             except:
                 distScale = 1
             self.xVTChange.emit(str(self.xVoltage[0]*distScale))
@@ -511,7 +515,7 @@ class voltageWorker(QThread):
     yV = [0]
     zV = [0]
 
-    def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage, padButton, distEntry):
+    def __init__(self, serialNumber, pzhdl, xVoltage, yVoltage, zVoltage, padButton, distEntry, limitVoltage):
         super().__init__()
         self.serialNumber = serialNumber
         self.pzhdl = pzhdl
@@ -520,12 +524,13 @@ class voltageWorker(QThread):
         self.zVoltage = zVoltage
         self.padButton = padButton
         self.distEntry = distEntry
+        self.limitVoltage = limitVoltage
 
     def run(self):
         while (mdtIsOpen(self.serialNumber) == 1):
             if (self.padButton.isChecked() == 0):
                 try:
-                    distScale = float(self.distEntry.text().strip())/self.limitVoltage
+                    distScale = float(self.distEntry.text().strip())/self.limitVoltage[0]
                 except:
                     distScale = 1
                 mdtGetXAxisVoltage(self.pzhdl, self.xV)
