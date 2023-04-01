@@ -355,6 +355,8 @@ class WidgetGallery(QDialog):
                 # update sliders on voltage change as well
                 self.freeControlButton.setStyleSheet("background-color : lightblue")
                 self.padControlToggle = 1
+                self.updateStatus.appendPlainText("DPad-YZ\nTriggers-X\nBumpers-step size")
+                self.updateStatus.ensureCursorVisible()
             except:
                 self.updateStatus.appendPlainText("No controller attached.")
                 self.freeControlButton.setStyleSheet("background-color : lightgrey")
@@ -417,11 +419,11 @@ class padWorker(QThread):
         while (self.toggleButton.isChecked() and self.joy.joyStatus() == 1):
             self.joyInputs = self.joy.read()
 
-            if (self.joyInputs[4] <= -0.25):
+            if (self.joyInputs[5] >= 0.25 and self.joyInputs[4] < 0.25):
                 if (self.padStep < len(self.stepArray)-1):
                     self.padStep = self.padStep + 1
                     self.stepComms.emit(str(self.stepArray[self.padStep]))
-            elif (self.joyInputs[4] >= 0.25):
+            elif (self.joyInputs[4] >= 0.25 and self.joyInputs[5] < 0.25):
                 if (self.padStep > 0):
                     self.padStep = self.padStep - 1
                     self.stepComms.emit(str(self.stepArray[self.padStep]))
@@ -584,7 +586,7 @@ class XboxController(object):
         return self.gamepadCheck
 
     def read(self): # return the buttons/triggers that you care about in this methode
-        return [self.LeftJoystickX, self.LeftJoystickY, self.LeftTrigger, self.RightTrigger, self.UDDPad]
+        return [self.LRDPad, self.UDDPad, self.LeftTrigger, self.RightTrigger, self.LeftBumper, self.RightBumper]
 
     def _monitor_controller(self):
         try:
